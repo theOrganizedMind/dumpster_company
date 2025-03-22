@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import numpy as np  
+from idlelib.tooltip import Hovertip
 
 from expenses import monthly_expenses
 import payroll
@@ -22,12 +23,11 @@ from disposal import monthly_disposal_cost
 
 NUM_MONTHS = 12
 WORK_DAYS_IN_MONTH = 20
-
-num_trucks = 3
-num_drivers = 3
-daily_work_hours = 10
-profit = 1.35
-avg_daily_fuel_per_truck = 150
+NUM_TRUCKS = 3
+NUM_DRIVERS = 3
+DAILY_WORK_HOURS = 10
+PROFIT_MARGIN = 1.35
+AVG_DAILY_FUEL_PER_TRUCK = 150
 
 # ========================================================================== #
 # ================================ Payroll ================================= #
@@ -43,23 +43,23 @@ total_monthly_expenses = round(sum(monthly_expenses.values()), 2)
 
 total_yearly_expenses = total_monthly_expenses * NUM_MONTHS
 
-total_avg_yearly_fuel_cost = (num_drivers * avg_daily_fuel_per_truck * \
-                                WORK_DAYS_IN_MONTH * NUM_MONTHS)
+total_avg_yearly_fuel_cost = (NUM_DRIVERS * AVG_DAILY_FUEL_PER_TRUCK 
+                                * WORK_DAYS_IN_MONTH * NUM_MONTHS)
 
-monthly_fuel_cost = num_drivers * avg_daily_fuel_per_truck * WORK_DAYS_IN_MONTH
+monthly_fuel_cost = NUM_DRIVERS * AVG_DAILY_FUEL_PER_TRUCK * WORK_DAYS_IN_MONTH
 
 total_daily_expenses = total_monthly_expenses / WORK_DAYS_IN_MONTH
 
-total_daily_fuel = avg_daily_fuel_per_truck * num_drivers
+total_daily_fuel = AVG_DAILY_FUEL_PER_TRUCK * NUM_DRIVERS
 
-daily_operating_cost = round(daily_payroll + total_daily_expenses + \
-                             total_daily_fuel, 2)
+daily_operating_cost = round(daily_payroll + total_daily_expenses
+                            + total_daily_fuel, 2)
 
 monthly_operating_cost = round(daily_operating_cost * WORK_DAYS_IN_MONTH, 2)
 
-daily_operating_cost_per_driver = round(daily_operating_cost / num_drivers, 2)
+daily_operating_cost_per_driver = round(daily_operating_cost / NUM_DRIVERS, 2)
 
-hourly_rate = round(daily_operating_cost_per_driver / daily_work_hours * profit, 2)
+hourly_rate = round(daily_operating_cost_per_driver / DAILY_WORK_HOURS * PROFIT_MARGIN, 2)
 
 # ========================================================================== #
 # =========================== Machine Learning ============================= #
@@ -81,10 +81,6 @@ def predict_and_plot(data_dict, column_name, future_months=3):
     data_column = list(data_dict.values())
     X = np.arange(len(data_column)).reshape(-1, 1)
     y = np.array(data_column)
-
-    # Split the data into training and testing sets
-    # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, 
-    #                                                     random_state=42)
 
     # Split the data into training and testing sets using TimeSeriesSplit
     tscv = TimeSeriesSplit(n_splits=5)
@@ -171,6 +167,14 @@ def calculate_financials():
     """
     try:
         option = options.get()
+        number_of_months = num_months_entry.get()
+
+        # Determine the number of months to calculate
+        if number_of_months.isdigit():
+            number_of_months = int(number_of_months)
+        else:
+            number_of_months = len(monthly_dumpster_count) # Default to all months
+
         if option == "Daily":
             financials = {
                 "Daily Operating Cost": daily_operating_cost,
@@ -210,28 +214,48 @@ def calculate_financials():
             display_financials("Trucks", financials)
 
         elif option == "Dumpsters":
-            total_num_dumpsters = sum(monthly_dumpster_count.values())
-            avg_dumpsters_month = round(statistics.mean(monthly_dumpster_count.values()))
+            # Calculate results based on the number of months
+            selected_months = list(monthly_dumpster_count.keys())[-number_of_months:]
+            selected_values = list(monthly_dumpster_count.values())[-number_of_months:]
+            total_num_dumpsters = sum(selected_values)
+            avg_dumpsters_month = round(statistics.mean(selected_values))
             avg_dumpsters_day = avg_dumpsters_month // WORK_DAYS_IN_MONTH
-            rate_per_dumpster = round(monthly_operating_cost \
-            / statistics.mean(monthly_dumpster_count.values()))
-            financials = {
-            "Total number of dumpsters ran": total_num_dumpsters,
-            "The average number of dumpster runs per month": avg_dumpsters_month,
-            "The average number of dumpster runs per day": avg_dumpsters_day,
-            "Estimated net income per dumpster should be": rate_per_dumpster,
-            }
+            rate_per_dumpster = round(monthly_operating_cost / avg_dumpsters_month)
+            if 12 > number_of_months:
+                financials = {
+                    f"Total number of dumpsters ran in the past {number_of_months} months": total_num_dumpsters,
+                    f"The average number of dumpster runs per month in the past {number_of_months} months": avg_dumpsters_month,
+                    f"The average number of dumpster runs per day in the past {number_of_months} months": avg_dumpsters_day,
+                    f"Estimated net income per dumpster in the past {number_of_months} months should be": rate_per_dumpster,
+                }
+            else:
+                financials = {
+                    f"Total number of dumpsters ran in the past {round(number_of_months / 12, 2)} years": total_num_dumpsters,
+                    f"The average number of dumpster runs per month in the past {round(number_of_months / 12, 2)} years": avg_dumpsters_month,
+                    f"The average number of dumpster runs per day in the past {round(number_of_months / 12, 2)} years": avg_dumpsters_day,
+                    f"Estimated net income per dumpster in the past {round(number_of_months / 12, 2)} years should be": rate_per_dumpster,
+                }
             display_financials("Dumpsters", financials)
 
         elif option == "Disposal":
-            total_disposal_cost = sum(monthly_disposal_cost.values())
-            avg_disposal_cost = round(statistics.mean(monthly_disposal_cost.values())) 
-            avg_daily_disposal_cost = round(avg_disposal_cost / WORK_DAYS_IN_MONTH)  
-            financials = {
-                "Total disposal cost": total_disposal_cost,
-                "The average monthly disposal cost": avg_disposal_cost,
-                "The average daily disposal cost": avg_daily_disposal_cost,
-            }
+            # Calculate results based on the number of months
+            selected_months = list(monthly_disposal_cost.keys())[-number_of_months:]
+            selected_values = list(monthly_disposal_cost.values())[-number_of_months:]
+            total_disposal_cost = sum(selected_values)
+            avg_disposal_cost = round(statistics.mean(selected_values))
+            avg_daily_disposal_cost = round(avg_disposal_cost / WORK_DAYS_IN_MONTH)
+            if 12 > number_of_months:
+                financials = {
+                    f"Total disposal cost for the past {number_of_months} months": total_disposal_cost,
+                    f"The average monthly disposal cost for the past {number_of_months} months": avg_disposal_cost,
+                    f"The average daily disposal cost for the past {number_of_months} months": avg_daily_disposal_cost,
+                }
+            else:
+                financials = {
+                    f"Total disposal cost for the past {round(number_of_months / 12, 2)} years": total_disposal_cost,
+                    f"The average monthly disposal cost for the past {round(number_of_months / 12, 2)} years": avg_disposal_cost,
+                    f"The average daily disposal cost for the past {round(number_of_months / 12, 2)} years": avg_daily_disposal_cost,
+                }
             display_financials("Disposal", financials)
 
         else:
@@ -357,6 +381,10 @@ def display_chart():
     except Exception as e:
         print(f"An error occurred: {e}")
 
+def create_tooltip(widget, text):
+    """Creates tooltips for the tkinter launch_demo_window widgets"""
+    Hovertip(widget, text, hover_delay=500)
+
 # ========================================================================== #
 # ============================== Tkinter GUI =============================== #
 # ========================================================================== #
@@ -364,6 +392,14 @@ root = tk.Tk()
 root.minsize(width=100, height=100)
 root.title("Company Financials")
 root.config(padx=25, pady=25)
+
+num_months_entry = tk.Entry(root, width=10)
+num_months_entry.grid(column=1, row=0, padx=5, pady=10)
+num_months_label = tk.Label(text="Number of Months")
+num_months_label.grid(column=2, row=0, padx=5, pady=10)
+create_tooltip(num_months_label, "Enter the previous number of months you want\n"
+               "to calculate and show results for 'Dumpsters' and 'Disposal'.\n"
+               "Default is all months.")
 
 options = ttk.Combobox(root, state="readonly", 
                            values=[
@@ -377,15 +413,15 @@ options = ttk.Combobox(root, state="readonly",
                                 ]
                             )
 
-options.grid(column=1, row=0, padx=5, pady=5)
+options.grid(column=1, row=1, padx=5, pady=10)
 options_label = tk.Label(text="Options")
-options_label.grid(column=2, row=0, padx=5, pady=5)
+options_label.grid(column=2, row=1, padx=5, pady=10)
 
 calculate_button = tk.Button(root, text="Calculate", command=calculate_financials)
-calculate_button.grid(column=1, row=1, padx=5, pady=5)
+calculate_button.grid(column=1, row=2, padx=5, pady=5)
 
 chart_button = tk.Button(root, text="Display Chart", command=display_chart)
-chart_button.grid(column=2, row=1, padx=5, pady=5)
+chart_button.grid(column=2, row=2, padx=5, pady=5)
 
 
 root.mainloop()
