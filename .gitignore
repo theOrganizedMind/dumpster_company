@@ -4,6 +4,7 @@
 /txt_files
 /json_files
 /ignore
+/log_files
 
 # Files to ignore
 sandbox.py
@@ -12,6 +13,7 @@ sandbox.py
 *.xlsx
 *.csv
 *.json
+*.txt
 
 # Project-wide
 .DS_Store

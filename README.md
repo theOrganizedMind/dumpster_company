@@ -1,75 +1,89 @@
 # Dumpster Company Financials
 
-This project is a financial management tool for a dumpster company. 
-It calculates and displays various financial metrics, including payroll, 
-expenses, truck values, dumpster counts, and disposal costs. It also includes 
-machine learning predictions for future dumpster counts and disposal costs.
+This project is a financial management and reporting tool for a dumpster company. 
+It calculates and displays various financial metrics, including payroll, expenses, 
+truck values, dumpster counts, disposal costs, and revenue. It also includes machine 
+learning predictions for future dumpster counts and disposal costs, as well as a suite 
+of reporting scripts for analyzing operational data.
 
 ## Project Structure
 
-### Files
+### Root Files
 
-- **financials/expenses.py**: Contains data for loans, subscriptions, and 
-  insurance expenses.
-- **financials/dumpster_count.py**: Contains data for monthly dumpster counts.
-- **financials/disposal.py**: Contains data for monthly disposal costs.
-- **financials/payroll.py**: Contains data for employee payroll.
-- **financials/trucks.py**: Contains data for truck values.
-- **financials/financials_main.py**: Main script that calculates and displays 
-  financial metrics, and includes machine learning predictions.
+- **hourly_rate.py**: Calculates daily, monthly, and yearly pay based on hourly wage and overtime.
+- **pds_to_tons.py**: Converts pounds to tons (short, long, or recycling) and copies the result to clipboard.
+- **requirements.txt**: Lists all required Python packages.
+- **LICENSE.txt**: MIT License.
+- **README.md**: Project documentation.
+
+### financials/
+
+- **expenses.py**: Contains data for loans, subscriptions, insurance, and monthly expenses.
+- **dumpster_count.py**: Contains data for monthly dumpster counts.
+- **disposal.py**: Contains data for monthly disposal costs.
+- **payroll.py**: Contains data for employee payroll and summary calculations.
+- **trucks.py**: Contains data for truck values and summary calculations.
+- **monthly_sales.py**: Contains data for monthly sales.
+- **revenue.py**: Contains yearly revenue and net profit data.
+- **financials_main.py**: Main script that calculates and displays financial metrics,
+and includes machine learning predictions.
+
+### reports/
+
+- **_5_largest_projects.py**: Finds and displays the 5 largest projects by company and location.
+- **annual_tonnage_report.py**: Summarizes annual tonnage by disposal location.
+- **disposal_report.py**: Cleans and processes disposal reports, saving results to Excel.
+- **dumpster_inventory.py**: Tracks unique dumpster locations and updates inventory text files.
+- **load_count.py**: Counts loads by location, date, and type, excluding certain descriptions.
+- **normalize_address.py**: Normalizes address strings for consistency across reports.
+- **profit_and_loss_report.py**: Displays and charts the top 10 biggest expenses from profit and loss reports.
+- **revenue_by_customer.py**: Calculates and charts revenue, gross profit, and percent profit by customer.
 
 ## Requirements
 
-The project requires the following Python packages:
+Install all required packages using:
 
-- contourpy==1.3.1
-- cycler==0.12.1
-- fonttools==4.56.0
-- joblib==1.4.2
-- kiwisolver==1.4.8
-- matplotlib==3.10.0
-- mplcursors==0.6
-- numpy==2.2.3
-- packaging==24.2
-- pandas==2.2.3
-- pillow==11.1.0
-- pyparsing==3.2.1
-- python-dateutil==2.9.0.post0
-- pytz==2025.1
-- scikit-learn==1.6.1
-- scipy==1.15.1
-- six==1.17.0
-- threadpoolctl==3.5.0
-- tzdata==2025.1
-
-You can install the required packages using the following command:
-
-```sh
+sh
 pip install -r requirements.txt
-```
 
 ## Usage
-To run the financial management tool, execute the financials_main.py script:
 
-This will open a Tkinter GUI where you can select various options to calculate 
-and display financial metrics or display charts.
+### Financials
 
-## Options
-- Daily: Displays daily operating cost, daily operating cost per driver, and 
-  rate per hour.
-- Monthly: Displays total monthly payroll, total monthly expenses, total monthly 
-  operating cost, and total average monthly fuel cost.
-- Yearly: Displays total yearly payroll, total yearly expenses, and total average 
-  yearly fuel cost.
-- Trucks: Displays the total cost of all trucks and the average truck cost.
-- Dumpsters: Displays the total number of dumpsters ran, the average number of 
-  dumpster runs per month, the average number of dumpster runs per day, and the 
-  estimated net income per dumpster.
-- Disposal: Displays the total disposal cost, the average monthly disposal cost, 
-  and the average daily disposal cost.
-- Predictions: Predicts and plots data for monthly dumpster count and monthly 
-  disposal cost for the next three months.
+To run the main financial management tool, execute:
+
+sh
+python financials/financials_main.py
+
+
+This opens a Tkinter GUI for calculating and displaying financial metrics or charts.
+
+### Reports
+
+Each script in the reports/ directory is standalone and provides a GUI for file
+selection or drag-and-drop. Run any script directly, for example:
+
+sh
+python reports/annual_tonnage_report.py
+
+
+Follow the instructions in each GUI to process your Excel or CSV files.
+
+## Options in financials_main.py
+
+- **Daily**: Displays daily operating cost, per driver, and rate per hour.
+- **Monthly**: Displays total monthly payroll, expenses, operating cost, and average fuel cost.
+- **Yearly**: Displays total yearly payroll, expenses, and average yearly fuel cost.
+- **Sales**: Displays sales metrics for selected months.
+- **Trucks**: Displays truck values and averages.
+- **Dumpsters**: Displays dumpster run counts and averages.
+- **Disposal**: Displays disposal cost metrics.
+- **Revenue**: Displays revenue and profit metrics.
+- **Quickbooks**: Displays Quickbooks monthly expenses.
+- **Predictions**: Predicts and plots data for sales, expenses, dumpster count, and disposal cost.
+- **Sales vs Expenses(Matplot)**: Compares sales and expenses in a grouped bar chart.
 
 ## License
-This project is licensed under the MIT License. 
-See the LICENSE.txt file for details.
+
+This project is licensed under the MIT License.  
+See the (LICENSE.txt) file for details.
