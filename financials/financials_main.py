@@ -412,7 +412,6 @@ def calculate_financials():
                     f"The average daily cost per dumpster in the past {number_of_months} months": avg_cost_per_dumpster,
                     f"Estimated net income per dumpster in the past {number_of_months} months should be": rate_per_dumpster,
                     f"Estimated net income per dumpster in the past {number_of_months} months with {PROFIT}% markup should be": rate_per_dumpster_with_markup,
-
                 }
             else:
                 financials = {

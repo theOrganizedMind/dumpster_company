@@ -12,7 +12,14 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 # =========================================================================== #
 # ================================== INFO =================================== #
 # =========================================================================== #
-# 
+# - Export Invoicing board to excel.
+# - This script will read the excel file and calculate the total revenue, 
+#   gross profit and percent profit for each customer.
+# - It will give the user the option to save the results to an excel 
+#   file in the Downloads folder. The file will be saved to the downloads 
+#   folder and named "Total_Revenue_By_Customer_<todays_date>.xlsx"
+# - It gives the user the option to show a pie chart of the top 10 highest
+#   revenue companies.
 # =========================================================================== #
 # ================================== TODO =================================== #
 # =========================================================================== #

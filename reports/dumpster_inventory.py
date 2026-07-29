@@ -14,7 +14,17 @@ from normalize_address import normalize_address
 # =========================================================================== #
 # ================================== INFO =================================== #
 # =========================================================================== #
-# 
+# This program loops through the invoicing excel file and adds the 'Initial Drop'
+# address to unique locations and removes the address if the description is 
+# 'Dump & Remove'. It appends the unique location to the specifed txt file.
+# Typically run this script 28 days after every quarter.  
+# Steps:
+# 1.) Filter invoicing board by quarter and description == 'Initial Drop' and 
+# 'Dump & Remove'.
+# 2.) Export to excel.
+# 3.) Save and select file.
+# 4.) Run this script to append the unique locations to a text file.
+# 5.) Search for dumpsters added to the text file. 
 # =========================================================================== #
 # ================================== TODO =================================== #
 # =========================================================================== #

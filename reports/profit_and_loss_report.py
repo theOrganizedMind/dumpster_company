@@ -9,7 +9,12 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 # =========================================================================== #
 # ================================== INFO =================================== #
 # =========================================================================== #
-#  
+# - Iterates through the dataframe and prints the top 10 biggest expenses with
+#    the name of the expense and total price.
+# - Uses matplotlib to create a pie chart of the top 10 expenses.
+# 1.) Filter profit and loss report for previous year and export as .csv.
+# 2.) Delete all total rows from the file.
+# 3.) Add 'Expenses' and 'Total' headers. 
 # =========================================================================== #
 # ================================== TODO =================================== #
 # =========================================================================== #
@@ -51,7 +56,8 @@ def process_file(file_path):
         if 'Expenses' not in df.columns or 'Total' not in df.columns:
             raise KeyError("Missing 'Expenses' or 'Total' column headers.")
     except KeyError as e:
-        messagebox.showerror("Error", f"{e}\nPlease ensure your file has 'Expenses' and 'Total' columns.")
+        messagebox.showerror("Error", 
+                             f"{e}\nPlease ensure your file has 'Expenses' and 'Total' columns.")
         return
     
     # Remove commas from 'Total' column if present and convert to float
@@ -73,7 +79,8 @@ def process_file(file_path):
     plt.show()
 
     # Ask user if they want to save results
-    should_save = messagebox.askyesno("Save Results", "Would you like to save the top 10 expenses to an Excel file?")
+    should_save = messagebox.askyesno("Save Results", 
+                                      "Would you like to save the top 10 expenses to an Excel file?")
     if should_save:
         todays_date = datetime.now().strftime("%m%d%Y")
         downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
