@@ -30,7 +30,7 @@ and includes machine learning predictions.
 
 ### reports/
 
-- **_5_largest_projects.py**: Finds and displays the 5 largest projects by company and location.
+- **_10_largest_projects.py**: Finds and displays the 10 largest projects by company and location.
 - **annual_tonnage_report.py**: Summarizes annual tonnage by disposal location.
 - **disposal_report.py**: Cleans and processes disposal reports, saving results to Excel.
 - **dumpster_inventory.py**: Tracks unique dumpster locations and updates inventory text files.

@@ -1,5 +1,6 @@
 import os
 import datetime
+import logging
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog
@@ -19,6 +20,9 @@ from tkinter import filedialog
 
 # Set to False to actually rename the files.
 TEST_MODE: bool = False
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 downloads_folder = Path.home() / "Downloads"
 today = datetime.date.today()
@@ -68,9 +72,11 @@ def rename_waste_tickets(test_mode=True):
                                 print(f"Renamed: {file} -> {alt_name}")
                             break
                         suffix += 1
-            except Exception as e:
-                print(f"Error renaming {file}: {e}")
-    except Exception as e:
-        print(f"Error in rename_waste_tickets: {e}")
+            except Exception:
+                logging.exception("Failed to rename waste ticket: %s", file)
+                print(f"Failed to rename {file.name}. Check the log for details.")
+    except Exception:
+        logging.exception("Failed to complete waste ticket rename workflow.")
+        print("Could not complete waste ticket renaming. Check the log for details.")
 
 rename_waste_tickets(test_mode=TEST_MODE)

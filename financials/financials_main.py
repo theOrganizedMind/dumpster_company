@@ -5,9 +5,6 @@ import mplcursors
 import pandas as pd
 import tkinter as tk
 from tkinter import messagebox, ttk
-from sklearn.model_selection import train_test_split, TimeSeriesSplit
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import numpy as np  
 from prophet import Prophet
 import plotly.graph_objects as go
@@ -15,21 +12,17 @@ from plotly.subplots import make_subplots
 import logging
 from idlelib.tooltip import Hovertip
 import os
-from datetime import datetime
-from tkinter import filedialog
+from datetime import datetime, date
 
-from expenses import monthly_expenses, quickbooks_monthly_expenses
+from postgresql import fetch_all
+from expenses import monthly_expenses
 import payroll
-from trucks import trucks
-from dumpster_count import monthly_dumpster_count
-from disposal import monthly_disposal_cost
-from revenue import revenue
-from monthly_sales import monthly_sales
 
 # ========================================================================== #
 # ================================== INFO ================================== #
 # ========================================================================== #
-#
+# Description of the Program:
+# 
 # ========================================================================== #
 # ================================== TODO ================================== #
 # ========================================================================== #
@@ -38,22 +31,28 @@ from monthly_sales import monthly_sales
 
 NUM_MONTHS = 12
 WORK_DAYS_IN_MONTH = 20
-NUM_TRUCKS = 3
 NUM_DRIVERS = 3
-DAILY_WORK_HOURS = 8
-PROFIT = 1.25
-AVG_DAILY_FUEL_PER_TRUCK = 150
+NUM_EMPLOYEES = len(payroll.employees)
+DAILY_WORK_HOURS = 10
+PROFIT = 1.35
+AVG_DAILY_FUEL_PER_TRUCK = 125
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 todays_date = datetime.now().strftime("%m%d%Y")
 
 # ========================================================================== #
 # ================================ Payroll ================================= #
 # ========================================================================== #
+overhead_payroll = payroll.employees.get("John Doe")
+
 total_payroll = round(sum(payroll.employees.values()))
 total_monthly_payroll = round(total_payroll / NUM_MONTHS, 2)
 daily_payroll = total_monthly_payroll / WORK_DAYS_IN_MONTH
-
-overhead_payroll = payroll.employees.get("John Doe")
 
 # ========================================================================== #
 # ================================ Expenses ================================ #
@@ -86,13 +85,183 @@ daily_operating_cost_per_driver_plus_markup = round(daily_operating_cost_per_dri
 total_daily_overhead_payroll = round(total_monthly_overhead_payroll 
                                      / WORK_DAYS_IN_MONTH, 2)
 
-avg_daily_sales = round(sum(monthly_sales.values()) / len(monthly_sales) 
-                        / WORK_DAYS_IN_MONTH, 2)
-
 hourly_rate = round(daily_operating_cost_per_driver / DAILY_WORK_HOURS * PROFIT, 2)
+# ========================================================================== #
+
+
+def format_month_key(value):
+    """Normalize a date-like value into a YYYY-MM month key string."""
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m')
+    if isinstance(value, date):
+        return value.strftime('%Y-%m')
+    return str(value)[:7]
+
+
+def normalize_year_month(value):
+    """Normalize YYYY-MM-DD or YYYY-MM input into a YYYY-MM string."""
+    if isinstance(value, datetime):
+        return value.strftime('%Y-%m')
+    if isinstance(value, date):
+        return value.strftime('%Y-%m')
+
+    value_str = str(value).strip()
+
+    try:
+        return datetime.strptime(value_str, '%Y-%m-%d').strftime('%Y-%m')
+    except ValueError:
+        pass
+
+    try:
+        return datetime.strptime(value_str, '%Y-%m').strftime('%Y-%m')
+    except ValueError:
+        return value_str[:7]
+
+
+def get_required_date_range():
+    """Read and validate start/end dates from the UI and return both values."""
+    start_date = start_date_entry.get().strip()
+    end_date = end_date_entry.get().strip()
+
+    if not start_date or not end_date:
+        raise ValueError("Please enter both start and end dates in YYYY-MM-DD format.")
+
+    datetime.strptime(start_date, '%Y-%m-%d')
+    datetime.strptime(end_date, '%Y-%m-%d')
+    return start_date, end_date
+
+
+def get_number_of_months_from_date_range():
+    """Return inclusive month count for the validated UI start/end date range."""
+    start_date, end_date = get_required_date_range()
+    start = datetime.strptime(start_date, '%Y-%m-%d')
+    end = datetime.strptime(end_date, '%Y-%m-%d')
+
+    if end < start:
+        raise ValueError("End date must be on or after the start date.")
+
+    return ((end.year - start.year) * 12) + (end.month - start.month) + 1
 
 # ========================================================================== #
-# =========================== Machine Learning ============================= #
+# ======================= PostgreSQL Helper Functions ====================== #
+# ========================================================================== #
+def fetch_monthly_disposal_cost(start_date, end_date):
+    """Fetch monthly disposal totals from PostgreSQL for the provided date range."""
+    monthly_costs = {}
+
+    rows = fetch_all(
+        "SELECT * FROM monthly_disposal_cost(%s, %s);",
+        (start_date, end_date),
+    )
+
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        month_key = format_month_key(row[0])
+        monthly_costs[month_key] = float(row[1])
+
+    return monthly_costs
+
+
+def fetch_monthly_dumpster_count(start_date, end_date):
+    """Fetch monthly dumpster counts from PostgreSQL for the provided date range."""
+    monthly_counts = {}
+
+    rows = fetch_all(
+        "SELECT * FROM monthly_dumpster_count(%s, %s);",
+        (start_date, end_date),
+    )
+
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        month_key = format_month_key(row[0])
+        monthly_counts[month_key] = int(row[1])
+
+    return monthly_counts
+
+
+def fetch_monthly_sales(start_date, end_date):
+    """Fetch monthly sales totals from PostgreSQL for the provided date range."""
+    monthly_sales_data = {}
+
+    rows = fetch_all(
+        "SELECT * FROM monthly_sales(%s, %s);",
+        (start_date, end_date),
+    )
+
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        month_key = format_month_key(row[0])
+        monthly_sales_data[month_key] = float(row[1])
+
+    return monthly_sales_data
+
+
+def fetch_quickbooks_monthly_expenses(start_date, end_date):
+    """Fetch QuickBooks monthly expenses from PostgreSQL for a date range."""
+    quickbooks_expenses = {}
+    start_month = normalize_year_month(start_date)
+    end_month = normalize_year_month(end_date)
+
+    rows = fetch_all(
+        """
+        SELECT year_month, expense
+        FROM monthly_expenses
+        WHERE year_month BETWEEN %s AND %s
+        ORDER BY year_month;
+        """,
+        (start_month, end_month),
+    )
+
+    for row in rows:
+        if len(row) < 2 or row[1] is None:
+            continue
+        month_key = format_month_key(row[0])
+        quickbooks_expenses[month_key] = float(row[1])
+
+    return quickbooks_expenses
+
+
+def fetch_truck_values():
+    """Fetch truck number to sales price mappings from the PostgreSQL trucks table."""
+    truck_values = {}
+
+    rows = fetch_all("SELECT TruckNumber, SalesPrice FROM trucks;")
+
+    for row in rows:
+        if len(row) < 2 or row[0] is None or row[1] is None:
+            continue
+        truck_values[str(row[0])] = float(row[1])
+
+    return truck_values
+
+
+def fetch_revenue_data():
+    """Fetch yearly revenue and net profit values from PostgreSQL."""
+    revenue_data = {}
+
+    rows = fetch_all(
+        """
+        SELECT year, revenue, net_profit
+        FROM revenue
+        ORDER BY year;
+        """
+    )
+
+    for row in rows:
+        if len(row) < 3 or row[0] is None:
+            continue
+        revenue_data[str(row[0])] = {
+            "revenue": float(row[1] or 0),
+            "net profit": float(row[2] or 0),
+        }
+
+    return revenue_data
+
+# ========================================================================== #
+# ======================= Machine Learning with Matplot ==================== #
 # ========================================================================== #
 def predict_and_plot_with_matplot(data_dict, column_name, future_months=3):
     """
@@ -227,7 +396,7 @@ def predict_and_plot_with_plotly(data_dicts, column_names, future_months=3):
     if save_to_excel:
         # Get the user's Downloads folder
         downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
-        file_path = os.path.join(downloads_folder, f"predictions_({todays_date}).xlsx")
+        file_path = os.path.join(downloads_folder, f"tdc_predictions_({todays_date}).xlsx")
         
         # Create a DataFrame to store all predictions
         combined_predictions = pd.DataFrame()
@@ -311,13 +480,20 @@ def calculate_financials():
     """
     try:
         option = options.get()
-        number_of_months = num_months_entry.get()
 
-        # Determine the number of months to calculate
-        if number_of_months.isdigit():
-            number_of_months = int(number_of_months)
-        else:
-            number_of_months = len(monthly_dumpster_count) # Default to all months
+        options_requiring_dates = {
+            "Sales",
+            "Dumpsters",
+            "Disposal",
+            "Quickbooks",
+        }
+        if option in options_requiring_dates:
+            if not start_date_entry.get().strip() or not end_date_entry.get().strip():
+                messagebox.showwarning(
+                    "Input Required",
+                    "Please enter both start and end dates in YYYY-MM-DD format.",
+                )
+                return
 
         if option == "Daily":
             financials = {
@@ -327,7 +503,6 @@ def calculate_financials():
                 daily_operating_cost_per_driver_plus_markup,
                 "Daily Overhead Payroll": total_daily_overhead_payroll,
                 "Rate per Hour": hourly_rate,
-                "Average Daily Sales": avg_daily_sales,
             }
             display_financials("Daily", financials)
 
@@ -350,15 +525,25 @@ def calculate_financials():
             display_financials("Yearly", financials)
 
         elif option == "Sales":
-            selected_months = list(monthly_sales.keys())[-number_of_months:]
-            selected_values = list(monthly_sales.values())[-number_of_months:]
+            start_date, end_date = get_required_date_range()
+            sales_data = fetch_monthly_sales(start_date, end_date)
+
+            if not sales_data:
+                messagebox.showwarning(
+                    "No Results",
+                    "No sales data was returned for that date range.",
+                )
+                return
+
+            number_of_months = len(sales_data)
+            selected_values = list(sales_data.values())
             total_sales = sum(selected_values)
             avg_sales_per_month = round(statistics.mean(selected_values))
             avg_sales_per_day = round(avg_sales_per_month / WORK_DAYS_IN_MONTH)
             avg_sales_day_per_driver = avg_sales_per_day / NUM_DRIVERS
-            max_sales = max(monthly_sales.values())
-            max_sales_month = max(monthly_sales, key=monthly_sales.get)
-            avg_monthly_sales = round(sum(monthly_sales.values()) / len(monthly_sales), 2)
+            max_sales_month = max(sales_data, key=sales_data.get)
+            max_sales = sales_data[max_sales_month]
+            avg_monthly_sales = round(sum(sales_data.values()) / len(sales_data), 2)
             avg_yearly_sales = avg_monthly_sales * NUM_MONTHS
             if 12 >= number_of_months:
                 financials = {
@@ -377,30 +562,48 @@ def calculate_financials():
             display_financials("Sales", financials)
         
         elif option == "Trucks":
+            truck_values = fetch_truck_values()
+
+            if not truck_values:
+                messagebox.showwarning(
+                    "No Results",
+                    "No truck data was returned from the trucks table.",
+                )
+                return
+
             print("\n")
             print("Trucks".center(20, "-"))
-            for t, v in trucks.items():
+            for t, v in truck_values.items():
                 print(f"{t}: ${v:,.2f}")
-            total_trucks = round(sum(trucks.values()))
-            avg_truck_cost = statistics.mean(trucks.values())
+            total_trucks = round(sum(truck_values.values()))
+            avg_truck_cost = statistics.mean(truck_values.values())
             financials = {
                 "Total cost of all trucks": total_trucks,
+                "Total number of trucks": len(truck_values),
                 "Average truck cost": avg_truck_cost
             }
             display_financials("Trucks", financials)
 
         elif option == "Dumpsters":
-            # Calculate results based on the number of months
-            selected_months = list(monthly_dumpster_count.keys())[-number_of_months:]
-            selected_values = list(monthly_dumpster_count.values())[-number_of_months:]
+            start_date, end_date = get_required_date_range()
+            dumpster_counts = fetch_monthly_dumpster_count(start_date, end_date)
+
+            if not dumpster_counts:
+                messagebox.showwarning(
+                    "No Results",
+                    "No dumpster count data was returned for that date range.",
+                )
+                return
+
+            number_of_months = len(dumpster_counts)
+            selected_values = list(dumpster_counts.values())
             total_num_dumpsters = sum(selected_values)
             avg_dumpsters_month = round(statistics.mean(selected_values))
             avg_dumpsters_day = round(avg_dumpsters_month / WORK_DAYS_IN_MONTH)
             avg_dumpsters_day_per_driver = avg_dumpsters_day / NUM_DRIVERS
             avg_cost_per_dumpster = round(daily_operating_cost / avg_dumpsters_day, 2)
-            max_dumpsters = max(monthly_dumpster_count.values())
-            max_dumpsters_month = max(monthly_dumpster_count, 
-                                       key=monthly_dumpster_count.get)
+            max_dumpsters_month = max(dumpster_counts, key=dumpster_counts.get)
+            max_dumpsters = dumpster_counts[max_dumpsters_month]
             rate_per_dumpster = round(monthly_operating_cost / avg_dumpsters_month)
             rate_per_dumpster_with_markup = round(rate_per_dumpster * PROFIT)
             if 12 >= number_of_months:
@@ -412,6 +615,8 @@ def calculate_financials():
                     f"The average daily cost per dumpster in the past {number_of_months} months": avg_cost_per_dumpster,
                     f"Estimated net income per dumpster in the past {number_of_months} months should be": rate_per_dumpster,
                     f"Estimated net income per dumpster in the past {number_of_months} months with {PROFIT}% markup should be": rate_per_dumpster_with_markup,
+                    f"Max dumpster month {max_dumpsters_month}": max_dumpsters,
+
                 }
             else:
                 financials = {
@@ -427,19 +632,29 @@ def calculate_financials():
             display_financials("Dumpsters", financials)
 
         elif option == "Disposal":
-            # Calculate results based on the number of months
-            selected_months = list(monthly_disposal_cost.keys())[-number_of_months:]
-            selected_values = list(monthly_disposal_cost.values())[-number_of_months:]
+            start_date, end_date = get_required_date_range()
+            disposal_costs = fetch_monthly_disposal_cost(start_date, end_date)
+
+            if not disposal_costs:
+                messagebox.showwarning(
+                    "No Results",
+                    "No disposal cost data was returned for that date range.",
+                )
+                return
+
+            number_of_months = len(disposal_costs)
+            selected_values = list(disposal_costs.values())
             total_disposal_cost = sum(selected_values)
             avg_disposal_cost = round(statistics.mean(selected_values))
             avg_daily_disposal_cost = round(avg_disposal_cost / WORK_DAYS_IN_MONTH)
-            max_disposal_cost = max(monthly_disposal_cost.values())
-            max_disposal_month = max(monthly_disposal_cost, key=monthly_disposal_cost.get)            
+            max_disposal_month = max(disposal_costs, key=disposal_costs.get)
+            max_disposal_cost = disposal_costs[max_disposal_month]
             if 12 >= number_of_months:
                 financials = {
                     f"Total disposal cost for the past {number_of_months} months": total_disposal_cost,
                     f"The average monthly disposal cost for the past {number_of_months} months": avg_disposal_cost,
                     f"The average daily disposal cost for the past {number_of_months} months": avg_daily_disposal_cost,
+                    f"Max disposal month {max_disposal_month}": max_disposal_cost,
                 }
             else:
                 financials = {
@@ -451,17 +666,26 @@ def calculate_financials():
             display_financials("Disposal", financials)
 
         elif option == "Revenue":
-            total_revenue = sum([year_data["revenue"] for year_data in revenue.values()])
-            total_net_profit = sum([year_data["net profit"] for year_data in revenue.values()])
+            revenue_data = fetch_revenue_data()
+
+            if not revenue_data:
+                messagebox.showwarning(
+                    "No Results",
+                    "No revenue data was returned from the revenue table.",
+                )
+                return
+
+            total_revenue = sum([year_data["revenue"] for year_data in revenue_data.values()])
+            total_net_profit = sum([year_data["net profit"] for year_data in revenue_data.values()])
             num_employees = len(payroll.employees.keys())
-            num_years = len(revenue)
+            num_years = len(revenue_data)
             avg_revenue = round(total_revenue / num_years, 2)
             avg_net_profit = round(total_net_profit / num_years, 2)
             avg_net_profit_per_employee = round(avg_net_profit / num_employees, 2) if num_employees != 0 else 0
             avg_profit_margin = round(avg_net_profit / avg_revenue, 2) if avg_revenue != 0 else 0
             avg_revenue_per_employee = round(avg_revenue / num_employees, 2) if num_employees != 0 else 0
             print('\n')
-            for key, values in revenue.items():
+            for key, values in revenue_data.items():
                 print(f"{key.center(20, '-')}")
                 print(f"Revenue: {values['revenue']:,.2f}")
                 print(f"Net profit: {values['net profit']:,.2f}")
@@ -479,9 +703,18 @@ def calculate_financials():
             display_financials("Revenue", financials)
 
         elif option == "Quickbooks":
-            # Calculate results based on the number of months
-            selected_months = list(quickbooks_monthly_expenses.keys())[-number_of_months:]
-            selected_values = list(quickbooks_monthly_expenses.values())[-number_of_months:]
+            start_date, end_date = get_required_date_range()
+            quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
+
+            if not quickbooks_expenses:
+                messagebox.showwarning(
+                    "No Results",
+                    "No QuickBooks expense data was returned for that date range.",
+                )
+                return
+
+            number_of_months = len(quickbooks_expenses)
+            selected_values = list(quickbooks_expenses.values())
             total_qb_monthly_expenses = round(sum(selected_values), 2)
             avg_qb_monthly_expenses = round(statistics.mean(selected_values), 2)
             if 12 >= number_of_months:
@@ -504,7 +737,11 @@ def calculate_financials():
             messagebox.showwarning("No Results", "Please choose a valid option.")
 
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.exception("Financial summary generation failed.")
+        messagebox.showerror(
+            "Error",
+            "The financial summary could not be generated. Review your inputs and local data setup, then try again.",
+        )
 
 # ========================================================================== #
 # ============================== Display Chart ============================= #
@@ -636,10 +873,21 @@ def plot_sales_vs_expenses(number_of_months=13):
     Plots a grouped bar chart for Monthly Sales vs Quickbooks Expenses.
     Shows only the last `number_of_months` months.
     """
+    start_date, end_date = get_required_date_range()
+    sales_data = fetch_monthly_sales(start_date, end_date)
+    quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
+
+    if not sales_data or not quickbooks_expenses:
+        messagebox.showwarning(
+            "No Results",
+            "Sales and QuickBooks expense data are required for that date range.",
+        )
+        return
+
     # Combine and sort all months
-    all_months = sorted(set(monthly_sales.keys()) | set(quickbooks_monthly_expenses.keys()))
-    sales = [monthly_sales.get(m, 0) for m in all_months]
-    expenses = [quickbooks_monthly_expenses.get(m, 0) for m in all_months]
+    all_months = sorted(set(sales_data.keys()) | set(quickbooks_expenses.keys()))
+    sales = [sales_data.get(m, 0) for m in all_months]
+    expenses = [quickbooks_expenses.get(m, 0) for m in all_months]
 
     # Show only the last number_of_months
     all_months = all_months[-number_of_months:]
@@ -696,83 +944,190 @@ def display_chart():
     """
     try:
         option = options.get()
-        number_of_months = num_months_entry.get()
 
-        # Only require number_of_months for bar charts
-        bar_chart_options = ['Sales', 'Dumpsters', 'Disposal', 'Quickbooks', 
-                             'Sales vs Expenses(Matplot)']
-        if option in bar_chart_options:
-            if not number_of_months.strip():
+        options_requiring_dates = {
+            "Sales",
+            "Dumpsters",
+            "Disposal",
+            "Quickbooks",
+            "Sales vs Expenses(Matplot)",
+            "Predictions(Plotly)",
+        }
+        if option in options_requiring_dates:
+            if not start_date_entry.get().strip() or not end_date_entry.get().strip():
                 messagebox.showwarning(
                     "Input Required",
-                    "Please enter the number of months before displaying a chart for this option."
+                    "Please enter both start and end dates in YYYY-MM-DD format.",
                 )
                 return
-            number_of_months_int = int(number_of_months)
-        else:
-            number_of_months_int = None
+
+        number_of_months_int = None
+        bar_chart_options = ['Sales', 'Dumpsters', 'Quickbooks', 
+                             'Sales vs Expenses(Matplot)']
+        if option in bar_chart_options:
+            number_of_months_int = get_number_of_months_from_date_range()
 
         if option == 'Monthly':
             labels = ['Payroll', 'Expenses', 'Avg. Fuel Cost']
             sizes = [total_monthly_payroll, total_monthly_expenses, 
                      monthly_fuel_cost]
-            plot_pie_chart("Monthly Expenses", labels, sizes)
+            plot_pie_chart("TDC Monthly Expenses", labels, sizes)
 
         elif option == 'Yearly':
             labels = ['Payroll', 'Expenses', 'Avg. Fuel Cost']
             sizes = [total_payroll, total_yearly_expenses, 
                      total_avg_yearly_fuel_cost]
-            plot_pie_chart("Yearly Expenses", labels, sizes)
+            plot_pie_chart("TDC Yearly Expenses", labels, sizes)
 
         elif option == 'Sales':
-            labels = list(monthly_sales.keys())
-            values = list(monthly_sales.values())
-            plot_bar_chart(f"Monthly Sales for the Past {number_of_months} Months", 
-                           labels, values, number_of_months_int)
+            start_date, end_date = get_required_date_range()
+            sales_data = fetch_monthly_sales(start_date, end_date)
+
+            if not sales_data:
+                messagebox.showwarning(
+                    "No Results",
+                    "No sales data was returned for that date range.",
+                )
+                return
+
+            labels = list(sales_data.keys())
+            values = list(sales_data.values())
+            plot_bar_chart(
+                f"Monthly Sales from {start_date} to {end_date}",
+                labels,
+                values,
+                len(sales_data),
+            )
 
         elif option == 'Trucks':
-            labels = list(trucks.keys())
-            values = list(trucks.values())
+            truck_values = fetch_truck_values()
+
+            if not truck_values:
+                messagebox.showwarning(
+                    "No Results",
+                    "No truck data was returned from the trucks table.",
+                )
+                return
+
+            labels = list(truck_values.keys())
+            values = list(truck_values.values())
             plot_pie_chart("Truck Values", labels, values)
 
         elif option == 'Dumpsters':
-            labels = list(monthly_dumpster_count.keys())
-            values = list(monthly_dumpster_count.values())
-            plot_bar_chart(f"Dumpster Counts for the Past {number_of_months} Months", 
-                           labels, values, number_of_months_int)
+            start_date, end_date = get_required_date_range()
+            dumpster_counts = fetch_monthly_dumpster_count(start_date, end_date)
+
+            if not dumpster_counts:
+                messagebox.showwarning(
+                    "No Results",
+                    "No dumpster count data was returned for that date range.",
+                )
+                return
+
+            labels = list(dumpster_counts.keys())
+            values = list(dumpster_counts.values())
+            plot_bar_chart(
+                f"Dumpster Counts from {start_date} to {end_date}",
+                labels,
+                values,
+                len(dumpster_counts),
+            )
 
         elif option == 'Disposal':
-            labels = list(monthly_disposal_cost.keys())
-            values = list(monthly_disposal_cost.values())
-            plot_bar_chart(f"Disposal Costs for the Past {number_of_months} Months", 
-                           labels, values, number_of_months_int)
+            start_date, end_date = get_required_date_range()
+            disposal_costs = fetch_monthly_disposal_cost(start_date, end_date)
+
+            if not disposal_costs:
+                messagebox.showwarning(
+                    "No Results",
+                    "No disposal cost data was returned for that date range.",
+                )
+                return
+
+            labels = list(disposal_costs.keys())
+            values = list(disposal_costs.values())
+            plot_bar_chart(
+                f"Disposal Costs from {start_date} to {end_date}",
+                labels,
+                values,
+                len(disposal_costs),
+            )
 
         elif option == 'Revenue':
-            labels = list(revenue.keys())
-            total_revenue = [revenue[year]["revenue"] for year in revenue]
-            net_profit = [revenue[year]["net profit"] for year in revenue]
+            revenue_data = fetch_revenue_data()
+
+            if not revenue_data:
+                messagebox.showwarning(
+                    "No Results",
+                    "No revenue data was returned from the revenue table.",
+                )
+                return
+
+            labels = list(revenue_data.keys())
+            total_revenue = [revenue_data[year]["revenue"] for year in revenue_data]
+            net_profit = [revenue_data[year]["net profit"] for year in revenue_data]
             plot_line_chart("Revenue and Net Profit by Year", labels, 
                             total_revenue, net_profit, "Total Revenue", 
                             "Net Profit")
 
         elif option == 'Quickbooks':
-            labels = list(quickbooks_monthly_expenses.keys())
-            values = list(quickbooks_monthly_expenses.values())
-            plot_bar_chart(f"Quickbooks Expenses for the Past {number_of_months} Months", 
-                           labels, values, number_of_months_int)
+            start_date, end_date = get_required_date_range()
+            quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
+
+            if not quickbooks_expenses:
+                messagebox.showwarning(
+                    "No Results",
+                    "No QuickBooks expense data was returned for that date range.",
+                )
+                return
+
+            labels = list(quickbooks_expenses.keys())
+            values = list(quickbooks_expenses.values())
+            plot_bar_chart(
+                f"Quickbooks Expenses from {start_date} to {end_date}",
+                labels,
+                values,
+                len(quickbooks_expenses),
+            )
 
         elif option == 'Predictions(Matplot)':
-            # Predict and plot for each dictionary
-            predict_and_plot_with_matplot(quickbooks_monthly_expenses, 
+            start_date, end_date = get_required_date_range()
+            sales_data = fetch_monthly_sales(start_date, end_date)
+            quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
+            dumpster_counts = fetch_monthly_dumpster_count(start_date, end_date)
+            disposal_costs = fetch_monthly_disposal_cost(start_date, end_date)
+
+            if not sales_data or not quickbooks_expenses or not dumpster_counts or not disposal_costs:
+                messagebox.showwarning(
+                    "No Results",
+                    "Sales, QuickBooks, dumpster count, and disposal data are required for predictions.",
+                )
+                return
+
+            # Predict and plot for each dataset
+            predict_and_plot_with_matplot(quickbooks_expenses, 
                                           'Quickbooks Monthly Expenses')
-            predict_and_plot_with_matplot(monthly_dumpster_count, 
+            predict_and_plot_with_matplot(dumpster_counts, 
                                           'Monthly Dumpster Count')
-            predict_and_plot_with_matplot(monthly_disposal_cost, 
+            predict_and_plot_with_matplot(disposal_costs, 
                                           'Monthly Disposal Cost')
 
         elif option == 'Predictions(Plotly)':
-            data_dicts = [monthly_sales, quickbooks_monthly_expenses, monthly_dumpster_count, 
-                          monthly_disposal_cost]
+            start_date, end_date = get_required_date_range()
+            sales_data = fetch_monthly_sales(start_date, end_date)
+            quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
+            dumpster_counts = fetch_monthly_dumpster_count(start_date, end_date)
+            disposal_costs = fetch_monthly_disposal_cost(start_date, end_date)
+
+            if not sales_data or not quickbooks_expenses or not dumpster_counts or not disposal_costs:
+                messagebox.showwarning(
+                    "No Results",
+                    "Sales, QuickBooks, dumpster count, and disposal data are required for predictions.",
+                )
+                return
+
+            data_dicts = [sales_data, quickbooks_expenses, dumpster_counts,
+                          disposal_costs]
             column_names = ['Monthly Sales',
                             'Quickbooks Monthly Expenses', 
                             'Monthly Dumpster Count', 
@@ -788,7 +1143,11 @@ def display_chart():
                     "Sorry, we do not have a chart for that option to display.")
             
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logging.exception("Financial chart generation failed.")
+        messagebox.showerror(
+            "Error",
+            "The chart could not be generated. Review your inputs and local data setup, then try again.",
+        )
 
 def create_tooltip(widget, text):
     """Creates tooltips for the tkinter launch_demo_window widgets"""
@@ -800,16 +1159,18 @@ def create_tooltip(widget, text):
 if __name__ == "__main__":
     root = tk.Tk()
     root.minsize(width=100, height=100)
-    root.title("Dumpster Company Financials")
+    root.title("TDC Financials")
     root.config(padx=25, pady=25)
 
-    num_months_entry = tk.Entry(root, width=10)
-    num_months_entry.grid(column=1, row=0, padx=5, pady=10)
-    num_months_label = tk.Label(text="Number of Months")
-    num_months_label.grid(column=2, row=0, padx=5, pady=10)
-    create_tooltip(num_months_label, "Enter the previous number of months you want\n"
-                                    "to calculate and show results for\n"
-                                    "'Sales', 'Dumpsters', 'Disposal' and 'Quickbooks.")
+    start_date_label = tk.Label(root, text="Start Date YYYY-MM-DD")
+    start_date_label.grid(column=1, row=0, padx=5, pady=5)
+    start_date_entry = tk.Entry(root, width=20)
+    start_date_entry.grid(column=1, row=1, padx=5, pady=10)
+
+    end_date_label = tk.Label(root, text="End Date YYYY-MM-DD")
+    end_date_label.grid(column=2, row=0, padx=5, pady=5)
+    end_date_entry = tk.Entry(root, width=20)
+    end_date_entry.grid(column=2, row=1, padx=5, pady=10)
 
     options = ttk.Combobox(root, width=25, state="readonly", 
                             values=[
@@ -828,15 +1189,15 @@ if __name__ == "__main__":
                                 ]
                             )
 
-    options.grid(column=1, row=1, padx=5, pady=10)
+    options.grid(column=1, row=2, padx=5, pady=10)
     options_label = tk.Label(text="Options")
-    options_label.grid(column=2, row=1, padx=5, pady=10)
+    options_label.grid(column=2, row=2, padx=5, pady=10)
 
-    calculate_button = tk.Button(root, text="Calculate", command=calculate_financials)
-    calculate_button.grid(column=1, row=2, padx=5, pady=5)
+    calculate_button = ttk.Button(root, text="Calculate", command=calculate_financials)
+    calculate_button.grid(column=1, row=3, padx=5, pady=5)
 
-    chart_button = tk.Button(root, text="Display Chart", command=display_chart)
-    chart_button.grid(column=2, row=2, padx=5, pady=5)
+    chart_button = ttk.Button(root, text="Display Chart", command=display_chart)
+    chart_button.grid(column=2, row=3, padx=5, pady=5)
 
 
     root.mainloop()

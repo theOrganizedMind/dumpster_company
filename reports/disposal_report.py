@@ -88,9 +88,12 @@ def process_file(file_path):
             logging.info(f"File saved to {save_path}")
         else:
             messagebox.showinfo("Cancelled", "Save operation cancelled.")
-    except Exception as e:
-        logging.error(f"Error processing file: {e}")
-        messagebox.showerror("Error", f"An error occurred: {e}")
+    except Exception:
+        logging.exception("Error processing disposal report file.")
+        messagebox.showerror(
+            "Error",
+            "The file could not be processed. Verify the file format and required columns, then try again.",
+        )
 
 
 if __name__ == "__main__":
@@ -105,8 +108,6 @@ if __name__ == "__main__":
         "Steps:\n"
         "1.) Filter and Export disposal by job address from Invoicing board.\n"
         "2.) Drag and drop the file into the GUI or select it using a file dialog.\n"
-        "3.) The program will process the file, clean it up, and save it back to the\n"
-        "Downloads folder with a modified name based on the location and today's date."
     )
 
     instructions_label = Label(root, text=instructions, justify="left", 

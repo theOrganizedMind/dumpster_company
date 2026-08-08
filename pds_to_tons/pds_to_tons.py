@@ -3,6 +3,7 @@ import os
 import json
 import subprocess
 import time
+import logging
 import tkinter as tk
 from tkinter import messagebox, ttk
 from idlelib.tooltip import Hovertip
@@ -19,6 +20,9 @@ from idlelib.tooltip import Hovertip
 
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "pds_to_tons_config.json")
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 def create_tooltip(widget, text):
     """Creates tooltips for the tkinter widgets"""
@@ -57,7 +61,11 @@ try:
     leed_disposal_cost = config_values["leed_disposal_cost"]
     leed_disposal_markup = config_values["leed_disposal_markup"]
 except Exception as error:
-    messagebox.showerror("Config Error", f"Could not load config file.\n\nDetails: {error}")
+    logging.exception("Failed to load pds_to_tons config.")
+    messagebox.showerror(
+        "Config Error",
+        "Could not load the config file. Verify that it exists and contains valid values.",
+    )
     raise SystemExit(1)
 
 
@@ -121,8 +129,17 @@ def calculate_and_copy():
         else:
             messagebox.showwarning("No Results", "Please choose a valid option.")
 
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    except ValueError:
+        messagebox.showerror(
+            "Input Error",
+            "Enter numeric values for the selected calculation before trying again.",
+        )
+    except Exception:
+        logging.exception("Failed to calculate pds_to_tons values.")
+        messagebox.showerror(
+            "Error",
+            "The calculation could not be completed. Review the inputs and config, then try again.",
+        )
 
 
 def open_config_editor():
@@ -192,8 +209,11 @@ def open_config_editor():
                 "Invalid Values",
                 "Both 'short_ton' and 'long_ton' must be valid numbers."
             )
-        except json.JSONDecodeError as error:
-            messagebox.showerror("Invalid JSON", f"Could not parse JSON.\n\nDetails: {error}")
+        except json.JSONDecodeError:
+            messagebox.showerror(
+                "Invalid JSON",
+                "Could not parse the config file. Fix the JSON formatting and try again.",
+            )
 
     save_button = tk.Button(editor, text="Save", width=12, command=save_config_from_editor)
     save_button.grid(column=0, row=1, pady=8)

@@ -55,9 +55,9 @@ def process_file(file_path):
     try:
         if 'Expenses' not in df.columns or 'Total' not in df.columns:
             raise KeyError("Missing 'Expenses' or 'Total' column headers.")
-    except KeyError as e:
+    except KeyError:
         messagebox.showerror("Error", 
-                             f"{e}\nPlease ensure your file has 'Expenses' and 'Total' columns.")
+                             "Please ensure your file has 'Expenses' and 'Total' columns.")
         return
     
     # Remove commas from 'Total' column if present and convert to float

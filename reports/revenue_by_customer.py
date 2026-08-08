@@ -9,17 +9,12 @@ import tkinter as tk
 from tkinter import filedialog, Label, Button, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
+from postgresql import fetch_all
+
 # =========================================================================== #
 # ================================== INFO =================================== #
 # =========================================================================== #
-# - Export Invoicing board to excel.
-# - This script will read the excel file and calculate the total revenue, 
-#   gross profit and percent profit for each customer.
-# - It will give the user the option to save the results to an excel 
-#   file in the Downloads folder. The file will be saved to the downloads 
-#   folder and named "Total_Revenue_By_Customer_<todays_date>.xlsx"
-# - It gives the user the option to show a pie chart of the top 10 highest
-#   revenue companies.
+# 
 # =========================================================================== #
 # ================================== TODO =================================== #
 # =========================================================================== #
@@ -28,6 +23,34 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
+
+GET_DATA_FROM_SQL_DATABASE = True # <-- Set to False to use excel file.
+START_DATE = "2026-01-01" # <-- Change start and end date to filter results.
+END_DATE = "2026-06-30"
+
+
+def fetch_get_company_totals(start_date, end_date):
+    """Fetch revenue by customer from PostgreSQL for the provided date range."""
+    rows = fetch_all(
+        "SELECT * "
+        "FROM get_company_totals(%s, %s)"
+        "ORDER BY total_price DESC;",
+        (start_date, end_date),
+    )
+
+    if not rows:
+        print("No projects found for the selected date range.")
+        return []
+
+    print(f"\nRevenue by Customer ({start_date} to {end_date})")
+    print("-" * 130)
+    print(f"{'Company':<35} {'Total Price':<50} {'Total Gross Profit':<20} {'Profit Percentage':>12}")
+    print("-" * 130)
+
+    for company, total_price, total_gross_profit, profit_percentage in rows:
+        print(f"{company:<35} {float(total_price):<50,.2f} {float(total_gross_profit):<20,.2f} {float(profit_percentage):>11,.2f}")
+
+    return rows
 
 
 def select_file():
@@ -146,32 +169,37 @@ def show_popup(df):
     text.insert("end", f"{'TOTALS':<35} {total_price:>20,.2f} {total_gross_profit:>22,.2f} {average_percent_profit:>15.2f}%\n")
     text.config(state="disabled")
 
-root = TkinterDnD.Tk()
-root.title("Revenue by Customer")
-root.geometry("600x500")
+if __name__ == "__main__":
+    if GET_DATA_FROM_SQL_DATABASE:
+        fetch_get_company_totals(START_DATE, END_DATE)
+    else:
+        # TkinterDnD GUI for file selection or drag-and-drop
+        root = TkinterDnD.Tk()
+        root.title("Revenue by Customer")
+        root.geometry("600x500")
 
-instructions = (
-    "Info:\n"
-    "This script will read the excel file and calculate the total revenue, "
-    "gross profit and percent profit for each customer.\n"
-    "Steps:\n"
-    "1.) Export the Invoicing board to excel\n"
-    "2.) Select the file using the 'Browse' button or drag and drop the file "
-    "into the designated area.\n"
-    "3.) The results will be displayed in a popup window and you will have "
-    "the option to save the results to an Excel file.\n"
-    "4.) You can also choose to view a pie chart of the top 10 highest revenue "
-    "companies.\n"
-)
+        instructions = (
+            "Info:\n"
+            "This script will read the excel file and calculate the total revenue, "
+            "gross profit and percent profit for each customer.\n"
+            "Steps:\n"
+            "1.) Export the TDC Invoicing board to excel\n"
+            "2.) Select the file using the 'Browse' button or drag and drop the file "
+            "into the designated area.\n"
+            "3.) The results will be displayed in a popup window and you will have "
+            "the option to save the results to an Excel file.\n"
+            "4.) You can also choose to view a pie chart of the top 10 highest revenue "
+            "companies.\n"
+        )
 
-instructions_label = Label(root, text=instructions, justify="left", 
-                           font=("Times New Roman", 12), wraplength=480)
-instructions_label.pack(pady=10)
+        instructions_label = Label(root, text=instructions, justify="left", 
+                                font=("Times New Roman", 12), wraplength=480)
+        instructions_label.pack(pady=10)
 
-Label(root, text="Select or Drag and Drop the Excel file for Revenue by Customer").pack(pady=10)
-drop_label = Label(root, text="Drag and drop file here", relief="ridge", width=40, height=3)
-drop_label.pack(pady=10)
-drop_label.drop_target_register(DND_FILES)
-drop_label.dnd_bind('<<Drop>>', handle_drop)
-Button(root, text="Browse", command=select_file).pack(pady=10)
-root.mainloop()
+        Label(root, text="Select or Drag and Drop the Excel file for Revenue by Customer").pack(pady=10)
+        drop_label = Label(root, text="Drag and drop file here", relief="ridge", width=40, height=3)
+        drop_label.pack(pady=10)
+        drop_label.drop_target_register(DND_FILES)
+        drop_label.dnd_bind('<<Drop>>', handle_drop)
+        Button(root, text="Browse", command=select_file).pack(pady=10)
+        root.mainloop()

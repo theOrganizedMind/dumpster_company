@@ -4,36 +4,43 @@ import os
 import tkinter as tk
 from tkinter import filedialog, Label, Button, messagebox
 from tkinterdnd2 import DND_FILES, TkinterDnD
-import re
 from idlelib.tooltip import Hovertip
 import logging
 
+from postgresql import fetch_all
 from normalize_address import normalize_address
 
 
 # =========================================================================== #
 # ================================== INFO =================================== #
 # =========================================================================== #
-# This program loops through the invoicing excel file and adds the 'Initial Drop'
-# address to unique locations and removes the address if the description is 
-# 'Dump & Remove'. It appends the unique location to the specifed txt file.
-# Typically run this script 28 days after every quarter.  
-# Steps:
-# 1.) Filter invoicing board by quarter and description == 'Initial Drop' and 
-# 'Dump & Remove'.
-# 2.) Export to excel.
-# 3.) Save and select file.
-# 4.) Run this script to append the unique locations to a text file.
-# 5.) Search for dumpsters added to the text file. 
+# 
 # =========================================================================== #
 # ================================== TODO =================================== #
 # =========================================================================== #
-# TODO:
+# TODO: 
 # =========================================================================== #
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+GET_DATA_FROM_SQL_DATABASE = True # <-- Set to False to use excel file.
+
+
+def fetch_get_active_dumpsters():
+    """Fetch active dumpster inventory from PostgreSQL."""
+    rows = fetch_all("SELECT * FROM get_active_dumpsters();")
+
+    if not rows:
+        print("No projects found for the selected date range.")
+        return []
+
+    print(f"\nActive Dumpster Locations:")
+    print("-" * 120)
+    print(f"{'Company':<35} {'Street':<40} {'City':<20} {'Size':<10} {'Active Count':>12}")
+    print("-" * 120)
+
+    for company, street, city, size, active_count in rows:
+        print(f"{company:<35} {street:<40} {city:<20} {size:<10} {int(active_count):>11}")
+
+    return rows
 
 def create_tooltip(widget, text):
     """Creates tooltips for the tkinter widgets"""
@@ -117,31 +124,39 @@ def process_file(file_path):
 
         messagebox.showinfo("Success", f"{len(new_locations)} new locations saved to {save_path}")
     
-    except Exception as e:
-        messagebox.showerror("Error", f"An error occurred: {e}")
+    except Exception:
+        logging.exception("Error processing dumpster inventory file.")
+        messagebox.showerror(
+            "Error",
+            "The file could not be processed. Verify the file format and required columns, then try again.",
+        )
 
 
 if __name__ == "__main__":
-    root = TkinterDnD.Tk()
-    root.title("Dumpster Inventory")
-    root.geometry("500x200")
-    root.config(padx=20, pady=20)
+    if GET_DATA_FROM_SQL_DATABASE:
+        fetch_get_active_dumpsters()
+    else:
+        root = TkinterDnD.Tk()
+        root.title("Dumpster Inventory")
+        root.geometry("500x200")
+        root.config(padx=20, pady=20)
 
-    select_filel_label = Label(root, text="Select or Drag and Drop the Excel file for Dumpster Inventory (Tooltip)")
-    select_filel_label.pack(pady=10)
-    create_tooltip(select_filel_label, "Info:\n"  
-        "This program loops through the invoicing excel file and adds the 'Initial Drop' \n"
-        "address to unique locations and removes the address if the description is \n"
-        "'Dump & Remove'. It appends the unique location to the specifed txt file. \n"
-        "Steps:\n"
-        "1.) Filter invoicing board by quarter and description == 'Initial Drop' and \n"
-        "'Dump & Remove'.\n"
-        "2.) Export to excel and select file.\n"
-        "3.) Run this script to append the unique locations to a text file.\n"
-        "4.) Search for dumpsters added to the text file.")
-    drop_label = Label(root, text="Drag and drop file here", relief="ridge", width=40, height=3)
-    drop_label.pack(pady=10)
-    drop_label.drop_target_register(DND_FILES)
-    drop_label.dnd_bind('<<Drop>>', handle_drop)
-    Button(root, text="Browse", command=select_file).pack(pady=10)
-    root.mainloop()
+        select_filel_label = Label(root, text="Select or Drag and Drop the Excel file for Dumpster Inventory (Tooltip)")
+        select_filel_label.pack(pady=10)
+        create_tooltip(select_filel_label, "Info:\n"  
+            "This program loops through the invoicing excel file and adds the 'Initial Drop' \n"
+            "address to unique locations and removes the address if the description is \n"
+            "'Dump & Remove'. It appends the unique location to the specifed txt file. \n"
+            "Typically run this script 28 days after every quarter.\n"
+            "Steps:\n"
+            "1.) Filter board by quarter and description == 'Initial Drop' and \n"
+            "'Dump & Remove'.\n"
+            "2.) Export to excel and select file.\n"
+            "3.) Run this script to append the unique locations to a text file.\n"
+            "4.) Search for dumpsters added to the text file.")
+        drop_label = Label(root, text="Drag and drop file here", relief="ridge", width=40, height=3)
+        drop_label.pack(pady=10)
+        drop_label.drop_target_register(DND_FILES)
+        drop_label.dnd_bind('<<Drop>>', handle_drop)
+        Button(root, text="Browse", command=select_file).pack(pady=10)
+        root.mainloop()
