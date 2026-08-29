@@ -7,7 +7,7 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 from idlelib.tooltip import Hovertip
 import logging
 
-from postgresql import fetch_all
+from postgresql import get_db_connection
 from normalize_address import normalize_address
 
 
@@ -21,24 +21,56 @@ from normalize_address import normalize_address
 # TODO: 
 # =========================================================================== #
 
-GET_DATA_FROM_SQL_DATABASE = True # <-- Set to False to use excel file.
+GET_DATA_FROM_SQL_DATABASE: bool = False # <-- Set to True to use SQL Database.
+GET_DATA_FROM_SAMPLE_DATA: bool = True
+
+# Fictitious data used when GET_DATA_FROM_SAMPLE_DATA is True (no SQL source required).
+SAMPLE_ACTIVE_DUMPSTERS = [
+    ("Bluegrass Hauling Co.", "142 Maplewood Ave", "Springvale", "20 Yard", 4),
+    ("Northgate Builders LLC", "27 Foxridge Ln", "Millhaven", "30 Yard", 3),
+    ("Crestview Excavation", "1203 Sunset Ridge Blvd", "Millhaven", "20 Yard", 2),
+    ("Ironoak Contracting", "33 Prairie View Rd", "Ashford", "15 Yard", 5),
+    ("Summit Site Services", "14 Redstone Ave", "Grantfield", "30 Yard", 1),
+]
+
+def get_sample_active_dumpsters():
+    """Return a fictitious sample dataset for demo purposes when no SQL source is available."""
+    return list(SAMPLE_ACTIVE_DUMPSTERS)
 
 
 def fetch_get_active_dumpsters():
     """Fetch active dumpster inventory from PostgreSQL."""
-    rows = fetch_all("SELECT * FROM get_active_dumpsters();")
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM get_active_dumpsters();",
+                )
+            rows = cur.fetchall()
 
     if not rows:
         print("No projects found for the selected date range.")
         return []
 
+    company_width = max(len("Company"), max(len(company) for company, _, _, _, _ in rows)) + 3
+    street_width = max(len("Street"), max(len(street) for _, street, _, _, _ in rows)) + 3
+    city_width = max(len("City"), max(len(city) for _, _, city, _, _ in rows)) + 3
+    size_width = max(len("Size"), max(len(size) for _, _, _, size, _ in rows)) + 3
+    active_count_width = 20
+    divider_width = company_width + street_width + city_width + size_width + active_count_width
+    row_format = (
+        f"{{company:<{company_width}}}{{street:<{street_width}}}"
+        f"{{city:<{city_width}}}{{size:<{size_width}}}{{active_count:>{active_count_width}}}"
+    )
+
     print(f"\nActive Dumpster Locations:")
-    print("-" * 120)
-    print(f"{'Company':<35} {'Street':<40} {'City':<20} {'Size':<10} {'Active Count':>12}")
-    print("-" * 120)
+    print("-" * divider_width)
+    print(row_format.format(company="Company", street="Street", city="City", 
+                            size="Size", active_count="Active Count"))
+    print("-" * divider_width)
 
     for company, street, city, size, active_count in rows:
-        print(f"{company:<35} {street:<40} {city:<20} {size:<10} {int(active_count):>11}")
+        print(row_format.format(company=company, street=street, city=city, size=size,
+                                active_count=int(active_count)))
 
     return rows
 
@@ -101,12 +133,8 @@ def process_file(file_path):
         downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
         downloads_file = os.path.join(downloads_folder, "remaining_dumpster_locations.txt")
 
-        # If txt_files/remaining_dumpster_locations.txt exists, append to it.
-        # Else, save as new file in Downloads (do NOT create txt_files dir).
         if os.path.exists(output_file):
             save_path = output_file
-            # Ensure txt_files exists (legacy support)
-            # os.makedirs(os.path.dirname(output_file), exist_ok=True)
             mode = "a"
         else:
             save_path = downloads_file
@@ -134,7 +162,38 @@ def process_file(file_path):
 
 if __name__ == "__main__":
     if GET_DATA_FROM_SQL_DATABASE:
-        fetch_get_active_dumpsters()
+        rows = fetch_get_active_dumpsters()
+        if rows:
+            active_dumpsters_df = pd.DataFrame(
+                rows, columns=["Company", "Street", "City", "Size", "Active_Count"]
+            )
+            root = tk.Tk()
+            root.withdraw()
+            if messagebox.askyesno("Save Results", "Would you like to save the results to an Excel file?"):
+                todays_date = datetime.now().strftime("%m%d%Y")
+                downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+                save_path = os.path.join(downloads_folder, f"active_dumpster_locations_({todays_date}).xlsx")
+                active_dumpsters_df.to_excel(save_path, index=False, freeze_panes=(1, 1))
+                messagebox.showinfo("Success", f"File saved to {save_path}")
+            else:
+                logging.info("Results not saved to an Excel file.")
+            root.destroy()
+    elif GET_DATA_FROM_SAMPLE_DATA:
+        rows = get_sample_active_dumpsters()
+        active_dumpsters_df = pd.DataFrame(
+            rows, columns=["Company", "Street", "City", "Size", "Active_Count"]
+        )
+        root = tk.Tk()
+        root.withdraw()
+        if messagebox.askyesno("Save Results", "Would you like to save the results to an Excel file?"):
+            todays_date = datetime.now().strftime("%m%d%Y")
+            downloads_folder = os.path.join(os.path.expanduser("~"), "Downloads")
+            save_path = os.path.join(downloads_folder, f"active_dumpster_locations_({todays_date}).xlsx")
+            active_dumpsters_df.to_excel(save_path, index=False, freeze_panes=(1, 1))
+            messagebox.showinfo("Success", f"File saved to {save_path}")
+        else:
+            logging.info("Results not saved to an Excel file.")
+        root.destroy()
     else:
         root = TkinterDnD.Tk()
         root.title("Dumpster Inventory")

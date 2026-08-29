@@ -53,9 +53,8 @@ def fetch_disposal_pricing_diff(start_date,
             FROM invoicing i
             WHERE i.tons <= 5
               AND i.disposal IN (
-                    'Triune (Centennial)',
-                    'Triune (Hermitage)',
-                    'Music City Transfer'
+                    'Disposal Location One',
+                    'Disposal Location Two'
               )
               AND i.date BETWEEN %s AND %s
         )
