@@ -261,72 +261,6 @@ def fetch_revenue_data():
     return revenue_data
 
 # ========================================================================== #
-# ======================= Machine Learning with Matplot ==================== #
-# ========================================================================== #
-def predict_and_plot_with_matplot(data_dict, column_name, future_months=3):
-    """
-    Makes a prediction for the specified number of future months for 
-    Quickbooks expenses, Dumpster count, and Disposal cost using the 
-    Prophet model.
-    
-    Parameters:
-    data_dict (dict): Dictionary containing historical data.
-    column_name (str): Name of the column to be used in the plot.
-    future_months (int): Number of future months to predict. Default is 3.
-    
-    Returns:
-    None
-    """
-    # Prepare the data
-    data = pd.DataFrame(list(data_dict.items()), columns=['ds', 'y'])
-    data['ds'] = pd.to_datetime(data['ds'])
-
-    # Filter the data to only include the last twelve months
-    data = data.tail(12)
-
-    # Initialize the Prophet model
-    model = Prophet()
-    model.fit(data)
-
-    # Create a dataframe for future dates
-    future = model.make_future_dataframe(periods=future_months, freq='ME')
-    
-    # Predict the future values
-    forecast = model.predict(future)
-
-    # Plot the results
-    plt.figure(figsize=(10, 5))
-
-    # Plot the previous data (last twelve months)
-    plt.plot(data['ds'], data['y'], 'bo-', label='Previous Data')
-
-    # Plot predicted data (next three months)
-    plt.plot(forecast['ds'], forecast['yhat'], 'ro--', label="Predicted Data")
-
-    # Add labels and title
-    plt.xlabel('Month')
-    plt.ylabel(column_name)
-    plt.title(f"{column_name}, For Past 12 Months and Predicted Next {future_months} Months")
-    
-    # Format the x-axis labels
-    plt.gca().xaxis.set_major_formatter(mpl.dates.DateFormatter('%Y-%m'))
-    plt.gca().xaxis.set_major_locator(mpl.dates.MonthLocator(interval=1))
-    plt.gcf().autofmt_xdate()
-
-    # Add legend
-    plt.legend()
-
-    # Implement mplcurors for interactive tooltips
-    cursor = mplcursors.cursor(hover=True)
-    cursor.connect("add", lambda sel: sel.annotation.set_text(f"{sel.target[1]:,.0f}"))
-
-    # Adjust layout to prevent x-axis labels from going off bottom of the screen
-    plt.tight_layout()
-
-    # Show plot
-    plt.show()
-
-# ========================================================================== #
 # ======================== Machine Learning using Plotly =================== #
 # ========================================================================== #
 def predict_and_plot_with_plotly(data_dicts, column_names, future_months=3):
@@ -535,7 +469,6 @@ def calculate_financials():
                 )
                 return
 
-            number_of_months = len(sales_data)
             selected_values = list(sales_data.values())
             total_sales = sum(selected_values)
             avg_sales_per_month = round(statistics.mean(selected_values))
@@ -545,24 +478,17 @@ def calculate_financials():
             max_sales = sales_data[max_sales_month]
             avg_monthly_sales = round(sum(sales_data.values()) / len(sales_data), 2)
             avg_yearly_sales = avg_monthly_sales * NUM_MONTHS
-            if 12 >= number_of_months:
-                financials = {
-                    f"The average daily sales in the past {number_of_months} months": avg_sales_per_day,
-                    f"The average monthly sales in the past {number_of_months} months": avg_sales_per_month,
-                    f"The total sales in the past {number_of_months} months": total_sales,
-                    f"Max sales month {max_sales_month}": max_sales,                }
-            else:
-                financials = {
-                    f"The average daily sales in the past {round(number_of_months / 12, 2)} years": avg_sales_per_day,
-                    f"The average monthly sales in the past {round(number_of_months / 12, 2)} years": avg_sales_per_month,
-                    f"The average yearly sales in the past {round(number_of_months / 12, 2)} years": avg_yearly_sales,
-                    f"The total sales in the past {round(number_of_months / 12, 2)} years": total_sales,
-                    f"Max sales month {max_sales_month}": max_sales,
+            financials = {
+                f"The average daily sales": avg_sales_per_day,
+                f"The average monthly sales": avg_sales_per_month,
+                f"The total sales": total_sales,
+                f"Max sales month {max_sales_month}": max_sales
                 }
-            display_financials("Sales", financials)
+            display_financials("Sales", financials, start_date, end_date)
         
         elif option == "Trucks":
-            truck_values = fetch_truck_values()
+            start_date, end_date = get_required_date_range()
+            truck_values = fetch_truck_values(start_date, end_date)
 
             if not truck_values:
                 messagebox.showwarning(
@@ -582,7 +508,7 @@ def calculate_financials():
                 "Total number of trucks": len(truck_values),
                 "Average truck cost": avg_truck_cost
             }
-            display_financials("Trucks", financials)
+            display_financials("Trucks", financials, start_date, end_date)
 
         elif option == "Dumpsters":
             start_date, end_date = get_required_date_range()
@@ -595,7 +521,6 @@ def calculate_financials():
                 )
                 return
 
-            number_of_months = len(dumpster_counts)
             selected_values = list(dumpster_counts.values())
             total_num_dumpsters = sum(selected_values)
             avg_dumpsters_month = round(statistics.mean(selected_values))
@@ -606,30 +531,18 @@ def calculate_financials():
             max_dumpsters = dumpster_counts[max_dumpsters_month]
             rate_per_dumpster = round(monthly_operating_cost / avg_dumpsters_month)
             rate_per_dumpster_with_markup = round(rate_per_dumpster * PROFIT)
-            if 12 >= number_of_months:
-                financials = {
-                    f"Total number of dumpsters ran in the past {number_of_months} months": total_num_dumpsters,
-                    f"The average number of dumpster runs per month in the past {number_of_months} months": avg_dumpsters_month,
-                    f"The average number of dumpster runs per day in the past {number_of_months} months": avg_dumpsters_day,
-                    f"The average number of dumpster runs per day per driver in the past {number_of_months} months": avg_dumpsters_day_per_driver,
-                    f"The average daily cost per dumpster in the past {number_of_months} months": avg_cost_per_dumpster,
-                    f"Estimated net income per dumpster in the past {number_of_months} months should be": rate_per_dumpster,
-                    f"Estimated net income per dumpster in the past {number_of_months} months with {PROFIT}% markup should be": rate_per_dumpster_with_markup,
-                    f"Max dumpster month {max_dumpsters_month}": max_dumpsters,
-
-                }
-            else:
-                financials = {
-                    f"Total number of dumpsters ran in the past {round(number_of_months / 12, 2)} years": total_num_dumpsters,
-                    f"The average number of dumpster runs per month in the past {round(number_of_months / 12, 2)} years": avg_dumpsters_month,
-                    f"The average number of dumpster runs per day in the past {round(number_of_months / 12, 2)} years": avg_dumpsters_day,
-                    f"The average number of dumpster runs per day per driver in the past {round(number_of_months / 12, 2)} years": avg_dumpsters_day_per_driver,
-                    f"The average daily cost per dumpster in the past {round(number_of_months / 12, 2)} years": avg_cost_per_dumpster,
-                    f"Estimated net income per dumpster in the past {round(number_of_months / 12, 2)} years should be": rate_per_dumpster,
-                    f"Estimated net income per dumpster in the past {round(number_of_months / 12, 2)} years with {PROFIT}% markup should be": rate_per_dumpster_with_markup,
-                    f"Max dumpster month {max_dumpsters_month}": max_dumpsters,
-                }
-            display_financials("Dumpsters", financials)
+            financials = {
+                f"Total number of dumpsters ran": total_num_dumpsters,
+                f"The average number of dumpster runs per month": avg_dumpsters_month,
+                f"The average number of dumpster runs per day": avg_dumpsters_day,
+                f"The average number of dumpster runs per day per driver": avg_dumpsters_day_per_driver,
+                f"The average daily cost per dumpster": avg_cost_per_dumpster,
+                f"Estimated net income per dumpster should be": rate_per_dumpster,
+                f"Estimated net income per dumpster with {PROFIT}% markup should be": rate_per_dumpster_with_markup,
+                f"Max dumpster month {max_dumpsters_month}": max_dumpsters,
+            }
+            
+            display_financials("Dumpsters", financials, start_date, end_date)
 
         elif option == "Disposal":
             start_date, end_date = get_required_date_range()
@@ -642,28 +555,19 @@ def calculate_financials():
                 )
                 return
 
-            number_of_months = len(disposal_costs)
             selected_values = list(disposal_costs.values())
             total_disposal_cost = sum(selected_values)
             avg_disposal_cost = round(statistics.mean(selected_values))
             avg_daily_disposal_cost = round(avg_disposal_cost / WORK_DAYS_IN_MONTH)
             max_disposal_month = max(disposal_costs, key=disposal_costs.get)
             max_disposal_cost = disposal_costs[max_disposal_month]
-            if 12 >= number_of_months:
-                financials = {
-                    f"Total disposal cost for the past {number_of_months} months": total_disposal_cost,
-                    f"The average monthly disposal cost for the past {number_of_months} months": avg_disposal_cost,
-                    f"The average daily disposal cost for the past {number_of_months} months": avg_daily_disposal_cost,
-                    f"Max disposal month {max_disposal_month}": max_disposal_cost,
-                }
-            else:
-                financials = {
-                    f"Total disposal cost for the past {round(number_of_months / 12, 2)} years": total_disposal_cost,
-                    f"The average monthly disposal cost for the past {round(number_of_months / 12, 2)} years": avg_disposal_cost,
-                    f"The average daily disposal cost for the past {round(number_of_months / 12, 2)} years": avg_daily_disposal_cost,
-                    f"Max disposal month {max_disposal_month}": max_disposal_cost,
-                }
-            display_financials("Disposal", financials)
+            financials = {
+                f"Total disposal cost": total_disposal_cost,
+                f"The average monthly disposal cost": avg_disposal_cost,
+                f"The average daily disposal cost": avg_daily_disposal_cost,
+                f"Max disposal month {max_disposal_month}": max_disposal_cost,
+            }
+            display_financials("Disposal", financials, start_date, end_date)
 
         elif option == "Revenue":
             revenue_data = fetch_revenue_data()
@@ -713,25 +617,14 @@ def calculate_financials():
                 )
                 return
 
-            number_of_months = len(quickbooks_expenses)
             selected_values = list(quickbooks_expenses.values())
             total_qb_monthly_expenses = round(sum(selected_values), 2)
             avg_qb_monthly_expenses = round(statistics.mean(selected_values), 2)
-            if 12 >= number_of_months:
-                financials = {
-                    f"Total quickbooks monthly expenses for the past "
-                    f"{number_of_months} months": total_qb_monthly_expenses,
-                    f"Average quickbooks monthly expense for the past "
-                    f"{number_of_months} months": avg_qb_monthly_expenses,
-                }
-            else:
-                financials = {
-                    f"Total quickbooks monthly expenses for the past "
-                    f"{round(number_of_months / 12, 2)} years": total_qb_monthly_expenses,
-                    f"Average quickbooks monthly expense for the past "
-                    f"{round(number_of_months / 12, 2)} years": avg_qb_monthly_expenses,
-                }
-            display_financials("Quickbooks", financials)
+            financials = {
+                f"Total quickbooks monthly expenses": total_qb_monthly_expenses,
+                f"Average quickbooks monthly expense": avg_qb_monthly_expenses,
+            }
+            display_financials("Quickbooks", financials, start_date, end_date)
 
         else:
             messagebox.showwarning("No Results", "Please choose a valid option.")
@@ -740,8 +633,7 @@ def calculate_financials():
         logging.exception("Financial summary generation failed.")
         messagebox.showerror(
             "Error",
-            "The financial summary could not be generated. Review your inputs and local data setup, then try again.",
-        )
+            "The financial summary could not be generated. Review your inputs and local data setup, then try again.")
 
 # ========================================================================== #
 # ============================== Display Chart ============================= #
@@ -1090,27 +982,8 @@ def display_chart():
                 len(quickbooks_expenses),
             )
 
-        elif option == 'Predictions(Matplot)':
-            start_date, end_date = get_required_date_range()
-            sales_data = fetch_monthly_sales(start_date, end_date)
-            quickbooks_expenses = fetch_quickbooks_monthly_expenses(start_date, end_date)
-            dumpster_counts = fetch_monthly_dumpster_count(start_date, end_date)
-            disposal_costs = fetch_monthly_disposal_cost(start_date, end_date)
-
-            if not sales_data or not quickbooks_expenses or not dumpster_counts or not disposal_costs:
-                messagebox.showwarning(
-                    "No Results",
-                    "Sales, QuickBooks, dumpster count, and disposal data are required for predictions.",
-                )
-                return
-
-            # Predict and plot for each dataset
-            predict_and_plot_with_matplot(quickbooks_expenses, 
-                                          'Quickbooks Monthly Expenses')
-            predict_and_plot_with_matplot(dumpster_counts, 
-                                          'Monthly Dumpster Count')
-            predict_and_plot_with_matplot(disposal_costs, 
-                                          'Monthly Disposal Cost')
+        elif option == 'Sales vs Expenses(Matplot)':
+            plot_sales_vs_expenses(number_of_months_int)
 
         elif option == 'Predictions(Plotly)':
             start_date, end_date = get_required_date_range()
@@ -1134,9 +1007,6 @@ def display_chart():
                             'Monthly Disposal Cost']
             
             predict_and_plot_with_plotly(data_dicts, column_names, 12)
-
-        elif option == 'Sales vs Expenses(Matplot)':
-            plot_sales_vs_expenses(number_of_months_int)
 
         else:
             messagebox.showwarning("No Results", 
@@ -1183,7 +1053,6 @@ if __name__ == "__main__":
                                 "Disposal",
                                 "Revenue",
                                 "Quickbooks",
-                                "Predictions(Matplot)",
                                 "Sales vs Expenses(Matplot)",
                                 "Predictions(Plotly)",
                                 ]
